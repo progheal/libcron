@@ -100,6 +100,33 @@ SCENARIO("Adding a task that expires in the future")
     }
 }
 
+SCENARIO("Add task within callback")
+{
+    GIVEN("A Cron with one task that adds a task when triggered")
+    {
+        auto fired = false;
+        Cron<> c;
+
+        c.add_schedule("Outer", "* * * * * ?", [&fired, &c](auto&)
+        {
+            if(!fired)
+            {
+                c.add_schedule("Inner", "* * * * * ?", [](auto&){});
+            }
+            fired = true;
+        });
+        WHEN("Waiting for one second")
+        {
+            std::this_thread::sleep_for(1s);
+            c.tick();
+            THEN("callback fired successfully without crash")
+            {
+                REQUIRE(fired);
+            }
+        }
+    }
+}
+
 SCENARIO("Get delay using Task-Information")
 {
     using namespace std::chrono_literals;

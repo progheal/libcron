@@ -46,7 +46,7 @@ namespace libcron
             std::tuple<bool, std::string, std::string>
             add_schedule(const Schedules& name_schedule_map, Task::TaskFunction work);
             void clear_schedules();
-            void remove_schedule(const std::string& name);
+            bool remove_schedule(const std::string& name);
 
             size_t count() const
             {
@@ -91,6 +91,8 @@ namespace libcron
             ClockType clock{};
             bool first_tick = true;
             std::chrono::system_clock::time_point last_tick{};
+            bool is_ticking = false;
+            std::string ticking_task_name{};
     };
     
     template<typename ClockType, typename LockType>
@@ -121,8 +123,7 @@ namespace libcron
         bool is_valid = true;
         std::tuple<bool, std::string, std::string> res{false, "", ""};
 
-        std::vector<Task> tasks_to_add;
-        tasks_to_add.reserve(name_schedule_map.size());
+        std::list<Task> tasks_to_add;
 
         for (auto it = name_schedule_map.begin(); is_valid && it != name_schedule_map.end(); ++it)
         {
@@ -164,9 +165,11 @@ namespace libcron
     }
     
     template<typename ClockType, typename LockType>
-    void Cron<ClockType, LockType>::remove_schedule(const std::string& name)
+    bool Cron<ClockType, LockType>::remove_schedule(const std::string& name)
     {
+        if(is_ticking && name == ticking_task_name) return false;
         tasks.remove(name);
+        return true;
     }
 
     template<typename ClockType, typename LockType>
@@ -244,22 +247,29 @@ namespace libcron
 
         if (!tasks.empty())
         {
-            for (size_t i = 0; i < tasks.size(); i++)
+            auto& container = tasks.get_tasks();
+            is_ticking = true;
+            for (auto task_iterator = container.begin(); task_iterator != container.end(); )
             {
-                if (tasks.at(i).is_expired(now))
+                // Exit early if no later tasks is expired since tasks are sorted
+                if (!task_iterator->is_expired(now)) break;
+
+                ticking_task_name = task_iterator->get_name();
+                task_iterator->execute(now);
+
+                using namespace std::chrono_literals;
+                if(task_iterator->calculate_next(now + 1s))
                 {
-                    auto& t = tasks.at(i);
-                    t.execute(now);
-
-                    using namespace std::chrono_literals;
-                    if (!t.calculate_next(now + 1s))
-                    {
-                        tasks.remove(t);
-                    }
-
-                    res++;
+                    ++task_iterator;
                 }
+                else
+                {
+                    task_iterator = container.erase(task_iterator);
+                }
+
+                res++;
             }
+            is_ticking = false;
 
             // Only sort if at least one task was executed
             if (res > 0)

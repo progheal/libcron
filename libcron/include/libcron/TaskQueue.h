@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vector>
+#include <list>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -12,12 +12,12 @@ namespace libcron
     class TaskQueue
     {
         public:
-            const std::vector<Task>& get_tasks() const
+            const std::list<Task>& get_tasks() const
             {
                 return c;
             }
             
-            std::vector<Task>& get_tasks()
+            std::list<Task>& get_tasks()
             {
                 return c;
             }
@@ -42,25 +42,19 @@ namespace libcron
                 c.push_back(std::move(t));
             }
             
-            void push(std::vector<Task>& tasks_to_insert)
+            void push(std::list<Task>& tasks_to_insert)
             {
-                c.reserve(c.size() + tasks_to_insert.size());
-                c.insert(c.end(), std::make_move_iterator(tasks_to_insert.begin()), std::make_move_iterator(tasks_to_insert.end()));
+                c.splice(c.end(), tasks_to_insert);
             }
             
             const Task& top() const
             {
-                return c[0];
-            }
-            
-            Task& at(const size_t i)
-            {
-                return c[i];
+                return *(c.begin());
             }
             
             void sort()
             {
-                std::sort(c.begin(), c.end(), std::less<>());
+                c.sort();
             }
             
             void clear()
@@ -72,27 +66,17 @@ namespace libcron
             
             void remove(Task& to_remove)
             {
-                auto it = std::find_if(c.begin(), c.end(), [&to_remove] (const Task& to_compare) { 
+                c.remove_if([&to_remove] (const Task& to_compare) {
                                     return to_remove.get_name() == to_compare;
                                     });
-                
-                if (it != c.end())
-                {
-                    c.erase(it);
-                }
             }
 
             void remove(std::string to_remove)
             {
                 lock.lock();
-                auto it = std::find_if(c.begin(), c.end(), [&to_remove] (const Task& to_compare) { 
+                c.remove_if([&to_remove] (const Task& to_compare) {
                                     return to_remove == to_compare;
                                     });
-                if (it != c.end())
-                {
-                    c.erase(it);
-                } 
-                
                 lock.unlock();
             }
             
@@ -110,6 +94,6 @@ namespace libcron
             
         private:
             LockType lock;
-            std::vector<Task> c;
+            std::list<Task> c;
     };
 }
